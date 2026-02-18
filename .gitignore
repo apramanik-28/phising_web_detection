@@ -9,7 +9,6 @@ __pycache__/
 
 # Models
 *.pkl
-models/
 artifacts/
 
 # Logs
