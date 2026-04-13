@@ -3,6 +3,7 @@ from .config.config import Config
 from .extensions import mongo, bcrypt, cors, jwt   # 🔥 IMPORT jwt
 from .routes.auth_routes import auth_bp
 from .routes.predict_routes import predict_bp
+from .routes.analytics_routes import analytics_bp
 
 def create_app():
     app = Flask(__name__)

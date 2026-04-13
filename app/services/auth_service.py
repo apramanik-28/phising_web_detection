@@ -127,3 +127,8 @@ class AuthService:
                 "email": user["email"]
             }
         }, 200
+
+
+
+
+

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from datetime import datetime
 
 from app.services.model_service import ModelService
@@ -11,16 +11,20 @@ from app.services.risk_service import RiskService
 from app.extensions import mongo
 
 
-# 🔥 DEFINE BLUEPRINT FIRST
 predict_bp = Blueprint("predict", __name__)
-
-# 🔥 LOAD MODEL AFTER
 model_service = ModelService()
 
 
 @predict_bp.route("/predict", methods=["POST"])
-@jwt_required()
 def predict():
+
+    # 🔥 Optional authentication
+    user_id = None
+    try:
+        verify_jwt_in_request(optional=True)
+        user_id = get_jwt_identity()
+    except:
+        user_id = None
 
     data = request.get_json()
     url = data.get("url")
@@ -32,17 +36,17 @@ def predict():
         # 1️⃣ Extract features
         features = FeatureExtractionService.extract_features(url)
 
-        # 2️⃣ ML Prediction
+        # 2️⃣ ML prediction
         prediction, confidence = model_service.predict(features)
         classification = "Phishing" if prediction == 1 else "Legitimate"
 
-        # 3️⃣ Domain Age
+        # 3️⃣ Domain age
         domain_age = DomainService.get_domain_age(url)
 
-        # 4️⃣ SSL
+        # 4️⃣ SSL check
         ssl_status = SSLService.check_ssl(url)
 
-        # 5️⃣ URL Intelligence
+        # 5️⃣ URL intelligence
         url_type = URLIntelligenceService.detect_url_type(url)
         flags = URLIntelligenceService.get_additional_flags(url)
 
@@ -72,6 +76,20 @@ def predict():
             if flags["ip_address_used"]:
                 explanation.append("Uses IP address instead of domain")
 
+        # 🔥 Save history only if logged in
+        if user_id:
+            mongo.db.history.insert_one({
+                "user_id": user_id,
+                "url": url,
+                "classification": classification,
+                "confidence": confidence,
+                "risk_score": risk_score,
+                "ssl_certified": ssl_status,
+                "domain_age_days": domain_age,
+                "url_type": url_type,
+                "timestamp": datetime.utcnow()
+            })
+
         return jsonify({
             "url": url,
             "classification": classification,
@@ -81,11 +99,6 @@ def predict():
             "ssl_certified": ssl_status,
             "domain_age_days": domain_age,
             "url_type": url_type,
-            "flags": {
-                "ip_address_used": flags["ip_address_used"],
-                "too_many_subdomains": flags["too_many_subdomains"],
-                "contains_suspicious_keyword": bool(flags["suspicious_keywords"])
-            },
             "explanation": explanation
         }), 200
 
